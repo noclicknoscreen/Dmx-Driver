@@ -28,18 +28,22 @@ vector<animation> multipleAnims;
 
 int scenario = 0;
 
-#define scenFadeIn  0
-#define scenSin   1
-#define scenWaveA   2
-#define scenWaveRandom   3
-#define scenMultiple  4
-#define scenFadeOut 5
-#define MAX_SCENARIO 5
+#define scenFadeIn      0
+#define scenStill       1
+#define scenSin         2
+#define scenWaveA       3
+#define scenWaveRandom  4
+#define scenMultiple    5
+#define scenFadeOut     6
+
+#define MAX_SCENARIO    5
 
 #define minBright 0
 #define maxBright 150
 
-long period = 5000;
+long animPeriod = 5000;
+long waveAPeriod = 2000;
+long fadePeriod = 1000;
 
 int waveRandomIndex = 0;
 int waveRandomBrightness = maxBright;
@@ -61,45 +65,57 @@ vector<int> volumesChannels = {2, 3, 4};
 const int buttonPin = 2;    // the number of the pushbutton pin
 int buttonState;             // the current reading from the input pin
 int lastButtonState = LOW;   // the previous reading from the input pin
-unsigned long lastDebounceTime = 0;  // the last time the output pin was toggled
-unsigned long debounceDelay = 50;    // the debounce time; increase if the output flickers
+unsigned long buttonDebounceTime = 0;  // the last time the output pin was toggled
+unsigned long buttondebounceDelay = 50;    // the debounce time; increase if the output flickers
+
+unsigned long buttonMaintainTime = 0;  // the last time the output pin was toggled
+bool maintainInitDone = false;
+#define BUTTON_MAINTAIN_TIME_MAX 1000
 
 /* ---------------------------------------
     Iterates channels
   --------------------------------------- */
 void initScenario() {
 
-  // Animation section
-  contourValue.start(period);
-  volumeValue.start(period);
 
   // Specific inits procedure
   switch (scenario) {
+
     case scenFadeIn:
+    case scenFadeOut:
+      contourValue.start(fadePeriod);
+      volumeValue.start(fadePeriod);
       break;
 
+    case scenStill:
     case scenSin:
+      contourValue.start(animPeriod);
+      volumeValue.start(animPeriod);
       break;
 
     case scenWaveA:
+      contourValue.start(waveAPeriod);
+      volumeValue.start(waveAPeriod);
       break;
 
     case scenWaveRandom:
+      contourValue.start(animPeriod);
+      volumeValue.start(animPeriod);
+      // Animation section
       waveRandomIndex = getNewIndexwaveRandom();
       break;
 
     case scenMultiple:
+      contourValue.start(animPeriod);
+      volumeValue.start(animPeriod);
+      // Animation section
       restartMultipleAnims();
-      break;
-
-    case scenFadeOut:
       break;
 
     default:
       break;
 
   }
-
 
   // -- log it
   Serial.print("Initializing scenario [");
@@ -125,7 +141,7 @@ void waveA(vector<int> _channels) {
   // Iterates channels --
   for (int idx = 0; idx < _channels.size(); idx++) {
 
-    float wavePhase = animation::floatMap(idx, 0.0f, _channels.size(), 0.0f, 0.25f);
+    float wavePhase = animation::floatMap(idx, 0.0f, _channels.size(), 0.0f, 1.0f);
     float brightness = volumeValue.loopSin(wavePhase, minBright, maxBright);
 
     // each channel has its phase --
@@ -177,7 +193,7 @@ int getNewIndexwaveRandom() {
 
 void restartMultipleAnims() {
   for (int idx = 0; idx < multipleAnims.size(); idx++) {
-    long newPeriod = random(0.5 * period, 1.5 * period);
+    long newPeriod = random(0.1 * animPeriod, animPeriod);
     multipleAnims[idx].start(newPeriod);
 
     // -- log it
@@ -255,51 +271,83 @@ void loop() {
 
   readingButton();
 
+  contoursUpdate();
+  volumesUpdate();
+
+}
+
+void contoursUpdate() {
+
   /* Sending Contours (Static) */
   switch (scenario) {
 
     case scenFadeIn:
-      // FADE IN and still
       simple(contoursChannels, contourValue.fadeIn(0, 0, maxBright));
-      simple(volumesChannels, volumeValue.fadeIn(0, 0, maxBright));
       break;
-
+    case scenStill:
     case scenSin:
-      // Sinus Lights
-      simple(contoursChannels, maxBright);
-      simple(volumesChannels, volumeValue.loopSin(0, minBright, maxBright));
-      break;
-
     case scenWaveA:
-      // Waving A spatially
-      simple(contoursChannels, maxBright);
-      waveA(volumesChannels);
-      break;
-
     case scenWaveRandom:
-      // Waving B spatially
-      simple(contoursChannels, maxBright);
-      waveRandom(volumesChannels);
-      break;
-
     case scenMultiple:
-      // FADE OUT
+      // FADE IN and Sinus Lights
       simple(contoursChannels, maxBright);
-      multiple(volumesChannels);
       break;
 
     case scenFadeOut:
       // FADE OUT
       simple(contoursChannels, contourValue.fadeOut(0, 0, maxBright));
-      simple(volumesChannels, volumeValue.fadeOut(0, 0, maxBright));
       break;
 
     default:
       simple(contoursChannels, maxBright);
+
+  }
+}
+
+void volumesUpdate() {
+
+  /* Sending Contours (Static) */
+  switch (scenario) {
+
+    case scenFadeIn:
+      // FADE IN and still
+      simple(volumesChannels, volumeValue.fadeIn(0, 0, maxBright));
+      break;
+
+    case scenStill:
+      // FADE IN and still
+      simple(volumesChannels, maxBright);
+      break;
+
+    case scenSin:
+      // FADE IN and still
+      simple(volumesChannels, volumeValue.loopSin(0, minBright, maxBright));
+      break;
+
+    case scenWaveA:
+      // Waving A spatially
+      waveA(volumesChannels);
+      break;
+
+    case scenWaveRandom:
+      // Waving B spatially
+      waveRandom(volumesChannels);
+      break;
+
+    case scenMultiple:
+      // FADE OUT
+      multiple(volumesChannels);
+      break;
+
+    case scenFadeOut:
+      // FADE OUT
+      simple(volumesChannels, volumeValue.fadeOut(0, 0, maxBright));
+      break;
+
+    default:
       simple(volumesChannels, maxBright);
 
   }
-
 }
 
 void readingButton() {
@@ -309,10 +357,10 @@ void readingButton() {
   // If the switch changed, due to noise or pressing:
   if (reading != lastButtonState) {
     // reset the debouncing timer
-    lastDebounceTime = millis();
+    buttonDebounceTime = millis();
   }
 
-  if ((millis() - lastDebounceTime) > debounceDelay) {
+  if ((millis() - buttonDebounceTime) > buttondebounceDelay) {
     // whatever the reading is at, it's been there for longer
     // than the debounce delay, so take it as the actual current state:
 
@@ -322,9 +370,30 @@ void readingButton() {
 
       // only toggle the LED if the new button state is HIGH
       if (buttonState == LOW) {
-        plusScenario();
+          plusScenario();
+      }else{
+        maintainInitDone = false;
+        buttonMaintainTime = 0;
       }
     }
+
+    // If maintained
+    if (buttonState == LOW) {
+      if (buttonMaintainTime >= BUTTON_MAINTAIN_TIME_MAX) {
+        scenario = scenFadeOut;
+        
+        if(maintainInitDone == false){
+          initScenario();
+          maintainInitDone = true;
+        }
+        /*
+        buttonMaintainTime = 0;
+        */
+      } else {
+        buttonMaintainTime = millis() - buttonDebounceTime;
+      }
+    }
+
   }
 
   // save the reading.  Next time through the loop,
@@ -336,24 +405,31 @@ void readingButton() {
 /* Sending Contours (Static) */
 String scenarioName(int _scenario) {
   switch (_scenario) {
-    case 0: return "Fade in";
-    case 1: return "Still";
-    case 2: return "Wave A";
-    case 3: return "Wave Random";
-    case 4: return "Multiple";
-    case 5: return "Fade Out";
+    case scenFadeIn: return "Fade in";
+    case scenStill: return "Still";
+    case scenSin: return "Sin";
+    case scenWaveA: return "Wave A";
+    case scenWaveRandom: return "Wave Random";
+    case scenMultiple: return "Multiple";
+    case scenFadeOut: return "Fade Out";
     default: return "No name";
   }
 }
 
 void plusScenario() {
-  scenario++;
-  if (scenario > MAX_SCENARIO) {
-    scenario = 0;
+
+  if (scenario == scenFadeOut) {
+    scenario = scenFadeIn;
+
+  } else {
+    scenario++;
+    if (scenario > MAX_SCENARIO) {
+      scenario = 1;
+    }
   }
 
   initScenario();
-  
+
 }
 
 /*
@@ -381,34 +457,9 @@ void testInstructions() {
 
     Serial.print(inputString);
 
-    // Choose the 1st scenario with key 1
-    if (inputString.startsWith("0")) {
-      scenario = 0;
-      initScenario();
-    }
-    // Choose the 1st scenario with key 1
-    if (inputString.startsWith("1")) {
-      scenario = 1;
-      initScenario();
-    }
-    // Choose the 1st scenario with key 1
-    if (inputString.startsWith("2")) {
-      scenario = 2;
-      initScenario();
-    }
-    // Choose the 1st scenario with key 1
-    if (inputString.startsWith("3")) {
-      scenario = 3;
-      initScenario();
-    }
-    // Choose the 1st scenario with key 1
-    if (inputString.startsWith("4")) {
-      scenario = 4;
-      initScenario();
-    }
-    // Choose the 1st scenario with key 1
-    if (inputString.startsWith("5")) {
-      scenario = 5;
+    int myInputNumber = inputString.toInt();
+    if (myInputNumber >= 0 || myInputNumber <= 6) {
+      scenario = myInputNumber;
       initScenario();
     }
 
