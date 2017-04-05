@@ -24,9 +24,10 @@ class animation {
 
     static float floatMap(float x, float in_min, float in_max, float out_min, float out_max);
 
+    float         m_ratio = 0;
+    
   private:
     unsigned long m_startTime;
-    float         m_ratio = 0;
     long          m_period;
     bool          m_isOn = false;
     bool          m_loop = false;

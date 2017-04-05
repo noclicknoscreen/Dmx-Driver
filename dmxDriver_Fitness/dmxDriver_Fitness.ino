@@ -22,21 +22,78 @@ using namespace std;
 #define pinDmx      3
 
 /* ANIMATION SECTION */
-animation animatedValue;
+animation volumeValue;
+animation contourValue;
 
 int scenario = 0;
+
+#define scenFadeIn  0
+#define scenStill   1
+#define scenWaveA   2
+#define scenWaveRandom   3
+#define scenRandom  4
+#define scenFadeOut 5
+
 long period = 5000;
+
+int waveRandomIndex = 0;
+int waveRandomBrightness = 255;
+
+// Serial read and test instructions ----
+String inputString = "";         // a string to hold incoming data
+boolean stringComplete = false;  // whether the string is complete
 
 /* ------------------------------------------
     Specific jean mone stuff
     Contours, Volumes
 */
-vector<int> contoursChannels = {5, 6};
-vector<int> volumesChannels = {1, 2, 3, 4};
+vector<int> contoursChannels = {1};
+vector<int> volumesChannels = {2, 3, 4};
 
 /* ---------------------------------------
     Iterates channels
   --------------------------------------- */
+void initScenario() {
+  // Animation section
+  contourValue.start(period);
+  volumeValue.start(period);
+
+  // Specific inits procedure
+  /* Sending Contours (Static) */
+  switch (scenario) {
+    case scenFadeIn:
+      break;
+
+    case scenStill:
+      break;
+
+    case scenWaveA:
+      break;
+
+    case scenWaveRandom:
+      waveRandomIndex = getNewIndexwaveRandom();
+      break;
+
+    case scenRandom:
+      break;
+
+    case scenFadeOut:
+      break;
+
+    default:
+      break;
+
+  }
+
+
+  // -- log it
+  Serial.print("Initializing scenario [");
+  Serial.print(scenario);
+  Serial.print("] : ");
+  Serial.print(scenarioName(scenario));
+  Serial.println();
+
+}
 void simple(vector<int> _channels, int _brightness) {
   // Iterates channels --
   for (int idx = 0; idx < _channels.size(); idx++) {
@@ -50,37 +107,36 @@ void waveA(vector<int> _channels) {
   for (int idx = 0; idx < _channels.size(); idx++) {
 
     float wavePhase = animation::floatMap(idx, 0.0f, _channels.size(), 0.0f, 0.25f);
-    float brightness = animatedValue.loopSin(wavePhase, 0, 255);
+    float brightness = volumeValue.loopSin(wavePhase, 0, 255);
 
-    Serial.print("idx : ");
-    Serial.print(idx);
-    Serial.print(" / ");
-    Serial.print(_channels.size());
-    Serial.print(" Phase : ");
-    Serial.print(wavePhase);
-    Serial.print(" Brightness : ");
-    Serial.print(brightness);
-    Serial.println();
-    
-
-   // each channel has its phase --
+    // each channel has its phase --
     lightChannel(_channels[idx], brightness);
-    
+
   }
 }
 
-void waveB(vector<int> _channels) {
+void waveRandom(vector<int> _channels) {
 
   // Iterates channels --
   for (int idx = 0; idx < _channels.size(); idx++) {
 
-    long wavePhase = animation::floatMap(idx, _channels.size(), 0, 0, PI * period / (float)_channels.size());
-    float brightness = animatedValue.loopSin(wavePhase, 0, 255);
+    if (idx == waveRandomIndex) {
+      float brightness = volumeValue.loopSin(0, 0, 255);
+      lightChannel(_channels[idx], brightness);
 
-    // each channel has its phase --
-    lightChannel(_channels[idx], brightness);
-    
+      // Change the index if lightness is reach
+      if (brightness >= waveRandomBrightness) {
+        waveRandomIndex = getNewIndexwaveRandom();
+      }
+
+    } else
+      lightChannel(_channels[idx], waveRandomBrightness);
   }
+
+}
+
+int getNewIndexwaveRandom() {
+  return random(0, volumesChannels.size());;
 }
 
 /* ---------------------------------------------
@@ -92,12 +148,12 @@ void lightChannel(int channel, long brightness) {
 
   /* Log brightness written ---- */
   /*
-  Serial.print("Brightness [");
-  Serial.print(brightness);
-  Serial.print("] send to channel [");
-  Serial.print(channel);
-  Serial.print("]");
-  Serial.println();
+    Serial.print("Brightness [");
+    Serial.print(brightness);
+    Serial.print("] send to channel [");
+    Serial.print(channel);
+    Serial.print("]");
+    Serial.println();
   */
 }
 /* ----------------------------------------- */
@@ -115,9 +171,9 @@ void setup() {
   dmxSetup();
 
   // Animation section
-  animatedValue.start(period);
+  initScenario();
 
-  scenario = 2;
+  scenario = 0;
 
 }
 
@@ -129,35 +185,48 @@ void dmxSetup() {
 
 void loop() {
 
-  animatedValue.update();
+  testInstructions();
+
+  contourValue.update();
+  volumeValue.update();
 
   /* Sending Contours (Static) */
-  simple(contoursChannels, 255);
-
   switch (scenario) {
-    case 0:
+
+    case scenFadeIn:
       // FADE IN and still
-      simple(volumesChannels, 255);
+      simple(contoursChannels, contourValue.fadeIn(0, 0, 255));
+      simple(volumesChannels, volumeValue.fadeIn(0, 0, 255));
       break;
 
-    case 1:
+    case scenStill:
       // Sinus Lights
-      /* Sending Volumes (Moving) */
-      simple(volumesChannels, animatedValue.loopSin(0, 0, 255));
+      simple(contoursChannels, 255);
+      simple(volumesChannels, volumeValue.loopSin(0, 0, 255));
       break;
 
-    case 2:
+    case scenWaveA:
       // Waving A spatially
+      simple(contoursChannels, 255);
       waveA(volumesChannels);
       break;
 
-    case 3:
+    case scenWaveRandom:
       // Waving B spatially
-      waveB(volumesChannels);
+      simple(contoursChannels, 255);
+      waveRandom(volumesChannels);
       break;
 
-    case 4:
+    case scenRandom:
       // FADE OUT
+      simple(contoursChannels, contourValue.fadeOut(0, 0, 255));
+      simple(volumesChannels, volumeValue.fadeOut(0, 0, 255));
+      break;
+
+    case scenFadeOut:
+      // FADE OUT
+      simple(contoursChannels, contourValue.fadeOut(0, 0, 255));
+      simple(volumesChannels, volumeValue.fadeOut(0, 0, 255));
       break;
 
     default:
@@ -166,5 +235,81 @@ void loop() {
 
   }
 
-
 }
+
+/* Sending Contours (Static) */
+String scenarioName(int _scenario) {
+  switch (_scenario) {
+    case 0: return "Fade in";
+    case 1: return "Still";
+    case 2: return "Wave A";
+    case 3: return "Wave B";
+    case 4: return "Random";
+    case 5: return "Fade Out";
+    default: return "No name";
+  }
+}
+
+/*
+  SerialEvent occurs whenever a new data comes in the
+  hardware serial RX.  This routine is run between each
+  time loop() runs, so using delay inside loop can delay
+  response.  Multiple bytes of data may be available.
+*/
+void testInstructions() {
+
+  if (Serial.available()) {
+    // get the new byte:
+    char inChar = (char)Serial.read();
+    // add it to the inputString:
+    inputString += inChar;
+    // if the incoming character is a newline, set a flag
+    // so the main loop can do something about it:
+    if (inChar == '\n') {
+      stringComplete = true;
+    }
+  }
+
+  // then get into test instructions ---
+  if (stringComplete == true) {
+
+    Serial.print(inputString);
+
+    // Choose the 1st scenario with key 1
+    if (inputString.startsWith("0")) {
+      scenario = 0;
+      initScenario();
+    }
+    // Choose the 1st scenario with key 1
+    if (inputString.startsWith("1")) {
+      scenario = 1;
+      initScenario();
+    }
+    // Choose the 1st scenario with key 1
+    if (inputString.startsWith("2")) {
+      scenario = 2;
+      initScenario();
+    }
+    // Choose the 1st scenario with key 1
+    if (inputString.startsWith("3")) {
+      scenario = 3;
+      initScenario();
+    }
+    // Choose the 1st scenario with key 1
+    if (inputString.startsWith("4")) {
+      scenario = 4;
+      initScenario();
+    }
+    // Choose the 1st scenario with key 1
+    if (inputString.startsWith("5")) {
+      scenario = 5;
+      initScenario();
+    }
+
+    // --
+    stringComplete = false;
+    inputString = "";
+
+  }
+}
+

@@ -37,11 +37,13 @@ float animation::loopSin(float _phase, long _min, long _max) {
 
   m_loop = true;
 
-  float sinValue = sin(0.5 * TWO_PI * getRatioWithPhase(_phase));
-  float sinMapped = floatMap(sinValue, 0, 1, _min, _max);
-
-  return sinMapped;
-
+  if (m_isOn == true) {
+    float sinValue = sin(0.5 * TWO_PI * getRatioWithPhase(_phase));
+    float sinMapped = floatMap(sinValue, 0, 1, _min, _max);
+    return sinMapped;
+  } else {
+    return _min;
+  }
 }
 
 /*
@@ -49,9 +51,11 @@ float animation::loopSin(float _phase, long _min, long _max) {
 */
 float animation::loopRamp(float _phase, long _min, long _max) {
   m_loop = true;
-
-  return floatMap(getRatioWithPhase(_phase), 0, 1, _min, _max);
-
+  if (m_isOn == true) {
+    return floatMap(getRatioWithPhase(_phase), 0, 1, _min, _max);
+  } else {
+    return _max;
+  }
 }
 
 /*
@@ -60,7 +64,11 @@ float animation::loopRamp(float _phase, long _min, long _max) {
 */
 float animation::fadeIn(float _phase, long _min, long _max) {
   m_loop = false;
-  return m_ratio;
+  if (m_isOn == true) {
+    return floatMap(m_ratio, 0, 1, _min, _max);
+  } else {
+    return _max;
+  }
 }
 
 /*
@@ -69,7 +77,11 @@ float animation::fadeIn(float _phase, long _min, long _max) {
 */
 float animation::fadeOut(float _phase, long _min, long _max) {
   m_loop = false;
-  return 1 - m_ratio;
+  if (m_isOn == true) {
+    return floatMap(m_ratio, 0, 1, _max, _min);
+  } else {
+    return _min;
+  }
 }
 
 // Returns relative ratio calculted on period (as milliseconds)
@@ -82,6 +94,8 @@ float animation::getRatio() {
 
   if (m_loop) {
     ratio =  (float)(timeDiff % m_period);
+  } else {
+    ratio =  timeDiff;
   }
 
   ratio = ratio / (float)m_period;
